@@ -1,0 +1,33 @@
+{
+  "name": "wren",
+  "version": "1.0.0",
+  "main": "dist/cli.js",
+  "bin": {
+    "wren": "./dist/cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx src/cli.tsx",
+    "build": "tsup src/cli.tsx --format esm --clean",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/figlet": "^1.7.0",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "figlet": "^1.11.0",
+    "ink": "^7.0.1",
+    "react": "^19.2.5"
+  }
+}

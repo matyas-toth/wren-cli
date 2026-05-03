@@ -49,13 +49,13 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
 
         const userMsg: MessageWithId = { id: Date.now(), role: 'user', content: trimmed };
         const newMessages = [...messages, userMsg];
-        
+
         // Add a placeholder assistant message that will be streamed into
         const assistantMsgId = Date.now() + 1;
         const initialAssistantMsg: MessageWithId = { id: assistantMsgId, role: 'assistant', content: '' };
-        
+
         setMessages([...newMessages, initialAssistantMsg]);
-        
+
         setIsLoading(true);
         setError(null);
         setInputKey(prev => prev + 1);
@@ -76,7 +76,7 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
                 return updated;
             });
         });
-        
+
         setIsLoading(false);
         if (!response.success) {
             setError(response.error || 'Unknown error occurred.');
@@ -100,20 +100,20 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
         <Box flexDirection="column" flexGrow={1} height="100%">
             <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflowY="hidden" marginBottom={1}>
                 {visibleMessages.length === 0 && messages.length === 0 ? (
-                    <Box flexDirection="column" alignItems="flex-start" flexGrow={1}>
+                    <Box flexDirection="column" alignItems="flex-start" flexGrow={1} flexShrink={0}>
                         <Text color="#FF9900" bold>
                             {asciiTitle}
                         </Text>
                         <Text color="gray">
                             Connected to {config.model} at {config.baseUrl}
                         </Text>
-                        <Box marginTop={1}>
+                        <Box marginTop={1} flexShrink={0}>
                             <Text color="#FFD700">Wren is breathing. Ready to chat!</Text>
                         </Box>
                     </Box>
                 ) : (
                     visibleMessages.map((msg) => (
-                        <Box key={msg.id} flexDirection="column" marginBottom={1}>
+                        <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
                             <Text bold color={msg.role === 'user' ? 'cyan' : '#FF9900'}>
                                 {msg.role === 'user' ? 'You:' : 'Wren:'}
                             </Text>

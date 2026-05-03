@@ -4,15 +4,18 @@ import { TextInput } from '@inkjs/ui';
 import type { ProviderConfig } from '../engine/config.js';
 import { chatCompletion, type ChatMessage } from '../engine/llm.js';
 
+import { Badge } from '@inkjs/ui';
+
 interface ChatProps {
     config: ProviderConfig;
+    onEditConfig: () => void;
 }
 
 interface MessageWithId extends ChatMessage {
     id: number;
 }
 
-export const Chat: React.FC<ChatProps> = ({ config }) => {
+export const Chat: React.FC<ChatProps> = ({ config, onEditConfig }) => {
     const [messages, setMessages] = useState<MessageWithId[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -26,12 +29,22 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
         });
     }, []);
 
-    // Scroll handling
+    // Scroll handling (Line-by-line via negative margin)
     useInput((input, key) => {
-        if (key.pageUp || (key.ctrl && key.upArrow)) {
-            setScrollOffset(prev => Math.min(prev + 1, Math.max(0, messages.length - 1)));
+        if (key.ctrl && input === 'e') {
+            onEditConfig();
+            return;
         }
-        if (key.pageDown || (key.ctrl && key.downArrow)) {
+
+        if (key.pageUp) {
+            setScrollOffset(prev => prev + 10);
+        } else if (key.ctrl && key.upArrow) {
+            setScrollOffset(prev => prev + 1);
+        }
+        
+        if (key.pageDown) {
+            setScrollOffset(prev => Math.max(prev - 10, 0));
+        } else if (key.ctrl && key.downArrow) {
             setScrollOffset(prev => Math.max(prev - 1, 0));
         }
     });
@@ -49,13 +62,13 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
 
         const userMsg: MessageWithId = { id: Date.now(), role: 'user', content: trimmed };
         const newMessages = [...messages, userMsg];
-
+        
         // Add a placeholder assistant message that will be streamed into
         const assistantMsgId = Date.now() + 1;
         const initialAssistantMsg: MessageWithId = { id: assistantMsgId, role: 'assistant', content: '' };
-
+        
         setMessages([...newMessages, initialAssistantMsg]);
-
+        
         setIsLoading(true);
         setError(null);
         setInputKey(prev => prev + 1);
@@ -76,7 +89,7 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
                 return updated;
             });
         });
-
+        
         setIsLoading(false);
         if (!response.success) {
             setError(response.error || 'Unknown error occurred.');
@@ -92,46 +105,50 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
         }
     };
 
-    // Calculate which messages to show based on scrollOffset
-    // By slicing off the end, justifyContent="flex-end" will push older messages into view
-    const visibleMessages = messages.slice(0, messages.length - scrollOffset);
-
     return (
         <Box flexDirection="column" flexGrow={1} height="100%">
             <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflowY="hidden" marginBottom={1}>
-                {visibleMessages.length === 0 && messages.length === 0 ? (
-                    <Box flexDirection="column" alignItems="flex-start" flexGrow={1} flexShrink={0}>
-                        <Text color="#FF9900" bold>
-                            {asciiTitle}
-                        </Text>
-                        <Text color="gray">
-                            Connected to {config.model} at {config.baseUrl}
-                        </Text>
-                        <Box marginTop={1} flexShrink={0}>
-                            <Text color="#FFD700">Wren is breathing. Ready to chat!</Text>
-                        </Box>
-                    </Box>
-                ) : (
-                    visibleMessages.map((msg) => (
-                        <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
-                            <Text bold color={msg.role === 'user' ? 'cyan' : '#FF9900'}>
-                                {msg.role === 'user' ? 'You:' : 'Wren:'}
+                {/* 
+                  Inner box uses marginBottom={-scrollOffset} to push lines DOWN 
+                  when scrollOffset is positive, enabling line-by-line scrolling
+                  for older messages.
+                */}
+                <Box flexDirection="column" marginBottom={-scrollOffset} flexShrink={0}>
+                    {messages.length === 0 ? (
+                        <Box flexDirection="column" alignItems="flex-start" flexGrow={1} flexShrink={0}>
+                            <Text color="#FF9900" bold>
+                                {asciiTitle}
                             </Text>
-                            <Text>{msg.content}</Text>
+                            <Text color="gray">
+                                Connected to {config.model} at {config.baseUrl}
+                            </Text>
+                            <Box marginTop={1} flexShrink={0}>
+                                <Text color="#FFD700">Wren is breathing. Ready to chat!</Text>
+                            </Box>
                         </Box>
-                    ))
-                )}
+                    ) : (
+                        messages.map((msg) => (
+                            <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
+                                <Text bold color={msg.role === 'user' ? 'cyan' : '#FF9900'}>
+                                    {msg.role === 'user' ? 'You:' : 'Wren:'}
+                                </Text>
+                                <Text>{msg.content}</Text>
+                            </Box>
+                        ))
+                    )}
+                </Box>
                 {error && (
-                    <Box marginTop={1}>
+                    <Box marginTop={1} flexShrink={0}>
                         <Text color="red">Error: {error}</Text>
                     </Box>
                 )}
-                {scrollOffset > 0 && (
-                    <Box marginTop={1} alignSelf="center">
-                        <Text color="gray" bold>↑ Scrolled up {scrollOffset} messages (PageDown to return) ↓</Text>
-                    </Box>
-                )}
             </Box>
+
+            {scrollOffset > 0 && (
+                <Box alignSelf="center" marginBottom={1}>
+                    <Text color="gray" bold>↑ Scrolled up {scrollOffset} lines (PageDown to return) ↓</Text>
+                </Box>
+            )}
 
             <Box
                 borderStyle="bold"
@@ -148,6 +165,22 @@ export const Chat: React.FC<ChatProps> = ({ config }) => {
                         onSubmit={handleSubmit}
                         isDisabled={isLoading}
                     />
+                </Box>
+            </Box>
+
+            {/* Status Bar */}
+            <Box flexDirection="row" marginTop={1} flexShrink={0} paddingX={1}>
+                <Text color="gray" dimColor>
+                    Connected to {config.model}
+                </Text>
+                <Box flexGrow={1} />
+                <Box gap={1}>
+                    <Badge color="blue">Ctrl+E</Badge>
+                    <Text color="gray">Providers</Text>
+                    <Badge color="yellow">PgUp/Dn</Badge>
+                    <Text color="gray">Scroll</Text>
+                    <Badge color="red">Ctrl+C</Badge>
+                    <Text color="gray">Exit</Text>
                 </Box>
             </Box>
         </Box>

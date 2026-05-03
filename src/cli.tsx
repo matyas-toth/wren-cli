@@ -1,21 +1,20 @@
 #!/usr/bin/env node
 import React, { useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
-import figlet from 'figlet';
 
-import { loadConfig, saveConfig, type AppConfig, type ProviderConfig } from './engine/config.js';
+import { loadConfig, saveConfig, type AppConfig } from './engine/config.js';
 import { ConfigWizard } from './cli/ConfigWizard.js';
 import { Chat } from './cli/Chat.js';
 
 const WrenTUI = () => {
     const [config, setConfig] = useState<AppConfig | null>(null);
+    const [view, setView] = useState<'chat' | 'config'>('chat');
     const [size, setSize] = useState({
         columns: process.stdout.columns,
         rows: process.stdout.rows,
     });
 
     useEffect(() => {
-        // Handle terminal resize
         const onResize = () => {
             setSize({
                 columns: process.stdout.columns,
@@ -23,26 +22,26 @@ const WrenTUI = () => {
             });
         };
         process.stdout.on('resize', onResize);
-
-        // Enter alternate screen buffer for full-screen experience
         process.stdout.write('\x1b[?1049h');
 
         loadConfig().then((loadedConfig) => {
             setConfig(loadedConfig);
+            if (!loadedConfig.providers || loadedConfig.providers.length === 0 || !loadedConfig.activeProviderId) {
+                setView('config');
+            }
         }).catch((err) => {
             console.error('Failed to load config:', err);
-            setConfig({});
+            setConfig({ providers: [] });
+            setView('config');
         });
 
         return () => {
             process.stdout.off('resize', onResize);
-            // Leave alternate screen buffer on exit
             process.stdout.write('\x1b[?1049l');
         };
     }, []);
 
-    const handleConfigComplete = async (providerConfig: ProviderConfig) => {
-        const newConfig = { ...config, provider: providerConfig };
+    const handleConfigSave = async (newConfig: AppConfig) => {
         setConfig(newConfig);
         await saveConfig(newConfig);
     };
@@ -55,17 +54,30 @@ const WrenTUI = () => {
         );
     }
 
+    const activeProvider = config.providers.find(p => p.id === config.activeProviderId);
+
     return (
         <Box flexDirection="column" width={size.columns} height={size.rows} paddingX={2} paddingY={1}>
-            {config.provider ? (
-                <Chat config={config.provider} />
-            ) : (
-                <ConfigWizard onComplete={handleConfigComplete} />
+            <Box display={view === 'chat' ? 'flex' : 'none'} flexDirection="column" flexGrow={1}>
+                {activeProvider ? (
+                    <Chat 
+                        config={activeProvider} 
+                        onEditConfig={() => setView('config')} 
+                    />
+                ) : (
+                    <Text color="gray">No active provider. Please configure one.</Text>
+                )}
+            </Box>
+
+            {view === 'config' && (
+                <ConfigWizard 
+                    config={config} 
+                    onSave={handleConfigSave} 
+                    onClose={() => setView('chat')} 
+                />
             )}
         </Box>
     );
 };
 
-// Start the app with alternate screen clearing optimization disabled to avoid flickering
-// Since we manually handle alt screen, we can just render normal
 render(<WrenTUI />);

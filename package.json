@@ -9,7 +9,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx src/cli.tsx",
     "build": "tsup src/cli.tsx --format esm --clean",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

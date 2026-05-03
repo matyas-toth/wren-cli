@@ -1,70 +1,71 @@
 #!/usr/bin/env node
 import React, { useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
-import { TextInput } from '@inkjs/ui';
 import figlet from 'figlet';
 
-// We define the custom ### border shape here
-const hashBorder = {
-    topLeft: '#',
-    topRight: '#',
-    bottomLeft: '#',
-    bottomRight: '#',
-    horizontal: '#',
-    vertical: '#'
-};
+import { loadConfig, saveConfig, type AppConfig, type ProviderConfig } from './engine/config.js';
+import { ConfigWizard } from './cli/ConfigWizard.js';
+import { Chat } from './cli/Chat.js';
 
 const WrenTUI = () => {
-    const [query, setQuery] = useState('');
-    const [asciiTitle, setAsciiTitle] = useState('');
+    const [config, setConfig] = useState<AppConfig | null>(null);
+    const [size, setSize] = useState({
+        columns: process.stdout.columns,
+        rows: process.stdout.rows,
+    });
 
-    // We generate the ASCII art on mount
     useEffect(() => {
-        const art = figlet.textSync('Wren CLI', {
-            font: 'Slant',
+        // Handle terminal resize
+        const onResize = () => {
+            setSize({
+                columns: process.stdout.columns,
+                rows: process.stdout.rows,
+            });
+        };
+        process.stdout.on('resize', onResize);
+
+        // Enter alternate screen buffer for full-screen experience
+        process.stdout.write('\x1b[?1049h');
+
+        loadConfig().then((loadedConfig) => {
+            setConfig(loadedConfig);
+        }).catch((err) => {
+            console.error('Failed to load config:', err);
+            setConfig({});
         });
-        setAsciiTitle(art);
+
+        return () => {
+            process.stdout.off('resize', onResize);
+            // Leave alternate screen buffer on exit
+            process.stdout.write('\x1b[?1049l');
+        };
     }, []);
 
+    const handleConfigComplete = async (providerConfig: ProviderConfig) => {
+        const newConfig = { ...config, provider: providerConfig };
+        setConfig(newConfig);
+        await saveConfig(newConfig);
+    };
+
+    if (config === null) {
+        return (
+            <Box flexDirection="column" paddingX={2} paddingY={1} width={size.columns} height={size.rows}>
+                <Text color="cyan">Loading Wren...</Text>
+            </Box>
+        );
+    }
+
     return (
-        <Box flexDirection="column" height={process.stdout.rows} paddingX={2} paddingY={1}>
-
-
-            <Box flexDirection="column" alignItems="flex-start" marginBottom={1}>
-                <Text color="#FF9900" bold>
-                    {asciiTitle}
-                </Text>
-                <Text color="gray">
-                    Agentic Core (v0.1.0)  |  Active Context: .brain/activeContext.md
-                </Text>
-            </Box>
-
-            <Box flexDirection="column" flexGrow={1} overflowY="hidden">
-                <Text color="#FFD700">Wren is breathing.</Text>
-            </Box>
-
-            <Box
-                borderStyle={"bold"}
-                borderColor="#FFCC00"
-                paddingX={1}
-                flexDirection="row"
-            >
-                <Text color="#FF9900" bold>❯ </Text>
-                <Box flexGrow={1} marginLeft={1}>
-                    <TextInput
-                        placeholder="Ask Wren to code..."
-                        value={query}
-                        onChange={setQuery}
-                        onSubmit={(value) => {
-                            setQuery('');
-                        }}
-                    />
-                </Box>
-            </Box>
-
+        <Box flexDirection="column" width={size.columns} height={size.rows} paddingX={2} paddingY={1}>
+            {config.provider ? (
+                <Chat config={config.provider} />
+            ) : (
+                <ConfigWizard onComplete={handleConfigComplete} />
+            )}
         </Box>
     );
 };
 
-// Start the app
+// Start the app with alternate screen clearing optimization disabled to avoid flickering
+// Since we manually handle alt screen, we can just render normal
 render(<WrenTUI />);

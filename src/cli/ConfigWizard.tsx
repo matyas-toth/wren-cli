@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text } from 'ink';
-import { TextInput, PasswordInput, Select } from '@inkjs/ui';
+import { TextInput, PasswordInput, Select, Badge } from '@inkjs/ui';
 import type { AppConfig, ProviderConfig } from '../engine/config.js';
 
 interface ConfigWizardProps {
@@ -185,11 +185,25 @@ export const ConfigWizard: React.FC<ConfigWizardProps> = ({ config, onSave, onCl
     };
 
     return (
-        <Box padding={1} flexDirection="column" flexGrow={1}>
-            {menuState === 'main' && renderMainMenu()}
-            {menuState === 'select' && renderSelect()}
-            {menuState === 'delete' && renderDelete()}
-            {menuState === 'add' && renderAdd()}
+        <Box padding={1} flexDirection="column" flexGrow={1} height="100%">
+            <Box flexDirection="column" flexGrow={1}>
+                {menuState === 'main' && renderMainMenu()}
+                {menuState === 'select' && renderSelect()}
+                {menuState === 'delete' && renderDelete()}
+                {menuState === 'add' && renderAdd()}
+            </Box>
+
+            {/* Status Bar */}
+            <Box flexDirection="row" marginTop={1} flexShrink={0}>
+                <Text color="gray" dimColor>
+                    {config.providers.find(p => p.id === config.activeProviderId)?.model || 'No Provider'} | {config.activeWorkspace || process.cwd()}
+                </Text>
+                <Box flexGrow={1} />
+                <Box gap={1}>
+                    <Badge color="red">Ctrl+C</Badge>
+                    <Text color="gray">Exit</Text>
+                </Box>
+            </Box>
         </Box>
     );
 };

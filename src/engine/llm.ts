@@ -1,14 +1,28 @@
 import type { ProviderConfig } from './config.js';
+import { toolsSchema } from './tools.js';
+
+export interface ToolCall {
+    id: string;
+    type: 'function';
+    function: {
+        name: string;
+        arguments: string;
+    };
+}
 
 export interface ChatMessage {
-    role: 'system' | 'user' | 'assistant';
-    content: string;
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    content: string | null;
+    name?: string;
+    tool_calls?: ToolCall[];
+    tool_call_id?: string;
 }
 
 export interface ChatResponse {
     success: boolean;
     content?: string;
     error?: string;
+    tool_calls?: ToolCall[];
 }
 
 export class ProviderError extends Error {
@@ -37,6 +51,8 @@ export async function chatCompletion(
             model: config.model,
             messages,
             stream: !!onUpdate,
+            tools: toolsSchema,
+            tool_choice: 'auto'
         });
 
         const response = await fetch(url, {
@@ -56,6 +72,7 @@ export async function chatCompletion(
             let done = false;
             let fullContent = '';
             let buffer = '';
+            let toolCallsBuffer: Record<number, ToolCall> = {};
 
             while (!done) {
                 const { value, done: readerDone } = await reader.read();
@@ -74,10 +91,29 @@ export async function chatCompletion(
 
                             try {
                                 const parsed = JSON.parse(dataStr);
-                                const chunkContent = parsed.choices?.[0]?.delta?.content || '';
+                                const delta = parsed.choices?.[0]?.delta;
+                                if (!delta) continue;
+
+                                const chunkContent = delta.content || '';
                                 if (chunkContent) {
                                     fullContent += chunkContent;
                                     onUpdate(chunkContent);
+                                }
+
+                                if (delta.tool_calls) {
+                                    for (const tc of delta.tool_calls) {
+                                        const index = tc.index;
+                                        if (!toolCallsBuffer[index]) {
+                                            toolCallsBuffer[index] = {
+                                                id: tc.id,
+                                                type: 'function',
+                                                function: { name: tc.function?.name || '', arguments: '' }
+                                            };
+                                        }
+                                        if (tc.function?.arguments) {
+                                            toolCallsBuffer[index].function.arguments += tc.function.arguments;
+                                        }
+                                    }
                                 }
                             } catch (e) {
                                 // Ignore parse errors for incomplete chunks just in case
@@ -86,10 +122,14 @@ export async function chatCompletion(
                     }
                 }
             }
-            return {
+            
+            const finalToolCalls = Object.values(toolCallsBuffer);
+            const res: ChatResponse = {
                 success: true,
                 content: fullContent,
             };
+            if (finalToolCalls.length > 0) res.tool_calls = finalToolCalls;
+            return res;
         } else {
             // Non-streaming response
             const data = await response.json() as any;
@@ -101,10 +141,14 @@ export async function chatCompletion(
                 };
             }
 
-            return {
+            const res: ChatResponse = {
                 success: true,
                 content: data.choices[0].message.content,
             };
+            if (data.choices[0].message.tool_calls) {
+                res.tool_calls = data.choices[0].message.tool_calls;
+            }
+            return res;
         }
     } catch (error) {
         if (error instanceof Error) {

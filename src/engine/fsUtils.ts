@@ -32,3 +32,20 @@ export async function writeText(path: string, content: string): Promise<void> {
         throw new FileSystemError(`Failed to write file at ${path}`, error);
     }
 }
+
+export async function readDir(path: string): Promise<string[]> {
+    try {
+        return await fs.readdir(path);
+    } catch (error) {
+        throw new FileSystemError(`Failed to read directory at ${path}`, error);
+    }
+}
+
+export async function isDirectory(path: string): Promise<boolean> {
+    try {
+        const stats = await fs.stat(path);
+        return stats.isDirectory();
+    } catch (error) {
+        return false;
+    }
+}

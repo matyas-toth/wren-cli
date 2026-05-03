@@ -13,6 +13,7 @@ export interface ProviderConfig {
 export interface AppConfig {
     providers: ProviderConfig[];
     activeProviderId?: string;
+    activeWorkspace?: string;
     provider?: any; // For backward compatibility/migration
 }
 

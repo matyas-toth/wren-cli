@@ -5,10 +5,11 @@ import { render, Box, Text } from 'ink';
 import { loadConfig, saveConfig, type AppConfig } from './engine/config.js';
 import { ConfigWizard } from './cli/ConfigWizard.js';
 import { Chat } from './cli/Chat.js';
+import { WorkspaceBrowser } from './cli/WorkspaceBrowser.js';
 
 const WrenTUI = () => {
     const [config, setConfig] = useState<AppConfig | null>(null);
-    const [view, setView] = useState<'chat' | 'config'>('chat');
+    const [view, setView] = useState<'chat' | 'config' | 'workspace'>('chat');
     const [size, setSize] = useState({
         columns: process.stdout.columns,
         rows: process.stdout.rows,
@@ -62,7 +63,9 @@ const WrenTUI = () => {
                 {activeProvider ? (
                     <Chat 
                         config={activeProvider} 
+                        appConfig={config}
                         onEditConfig={() => setView('config')} 
+                        onEditWorkspace={() => setView('workspace')}
                         isActive={view === 'chat'}
                     />
                 ) : (
@@ -75,6 +78,17 @@ const WrenTUI = () => {
                     config={config} 
                     onSave={handleConfigSave} 
                     onClose={() => setView('chat')} 
+                />
+            )}
+
+            {view === 'workspace' && (
+                <WorkspaceBrowser 
+                    initialPath={config.activeWorkspace || process.cwd()}
+                    onSelect={async (path) => {
+                        await handleConfigSave({ ...config, activeWorkspace: path });
+                        setView('chat');
+                    }}
+                    onClose={() => setView('chat')}
                 />
             )}
         </Box>

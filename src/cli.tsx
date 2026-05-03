@@ -63,6 +63,7 @@ const WrenTUI = () => {
                     <Chat 
                         config={activeProvider} 
                         onEditConfig={() => setView('config')} 
+                        isActive={view === 'chat'}
                     />
                 ) : (
                     <Text color="gray">No active provider. Please configure one.</Text>

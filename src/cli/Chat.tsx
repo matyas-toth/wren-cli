@@ -9,13 +9,14 @@ import { Badge } from '@inkjs/ui';
 interface ChatProps {
     config: ProviderConfig;
     onEditConfig: () => void;
+    isActive: boolean;
 }
 
 interface MessageWithId extends ChatMessage {
     id: number;
 }
 
-export const Chat: React.FC<ChatProps> = ({ config, onEditConfig }) => {
+export const Chat: React.FC<ChatProps> = ({ config, onEditConfig, isActive }) => {
     const [messages, setMessages] = useState<MessageWithId[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export const Chat: React.FC<ChatProps> = ({ config, onEditConfig }) => {
         } else if (key.ctrl && key.downArrow) {
             setScrollOffset(prev => Math.max(prev - 1, 0));
         }
-    });
+    }, { isActive });
 
     // Reset scroll when a new message is added by user
     useEffect(() => {
@@ -163,7 +164,7 @@ export const Chat: React.FC<ChatProps> = ({ config, onEditConfig }) => {
                         key={`input-${inputKey}`}
                         placeholder={isLoading ? "Wren is thinking..." : "Ask Wren to code..."}
                         onSubmit={handleSubmit}
-                        isDisabled={isLoading}
+                        isDisabled={isLoading || !isActive}
                     />
                 </Box>
             </Box>

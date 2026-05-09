@@ -25,4 +25,5 @@ This CLI tool will be installed and running on a users PC, so treat everything l
 - When generating code, always include proper TypeScript interfaces/types.
 - Never use `any`. Use `unknown` if a type is truly dynamic.
 - Always use nicely formatted and designed TUI CLI interfaecs with strictly @inkjs/ui
-- ALWAYS use context7 mcp if you're using libraries and dependencies, you can ground your knowledge properly with it. E.g. when using @inkjs/ui or ink.
+- **Strict Persona Tooling:** Tool definitions must be explicitly gated. The Thinker gets `[search files by string or regex or ripgrep pattern etc.., list files in root or certain folders or certain filenames, read lines of files, query the context7 mcp, update_system_patterns, update_project_brief, handoff_to_executor]`. The Executor gets `[read_lines, read files by string or regex or ripgrep pattern etc.., edit files with search + replace OR diffs, powershell() (run powershell commands scoped to the working dir), handoff_to_thinker (but this automatically happens when the coder thinks he's done, we give the thinker the diffs, commands run since the coder got the plan)]`.
+- ALWAYS use context7 mcp yourself if you're using libraries and dependencies, you can ground your knowledge properly with it. E.g. when using @inkjs/ui or ink.

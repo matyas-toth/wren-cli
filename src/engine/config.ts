@@ -5,6 +5,7 @@ import { exists, readText, writeText } from './fsUtils.js';
 export interface ProviderConfig {
     id: string;
     name: string;
+    providerType: 'openai' | 'anthropic' | 'deepseek' | 'custom';
     baseUrl: string;
     apiKey: string;
     model: string;
@@ -37,11 +38,11 @@ export async function loadConfig(): Promise<AppConfig> {
         
         let needsSave = false;
 
-        // Migration from single provider to multi-provider array
         if (parsed.provider && !parsed.providers) {
             const migratedProvider: ProviderConfig = {
                 id: Date.now().toString(),
                 name: 'Legacy Provider',
+                providerType: 'custom',
                 baseUrl: parsed.provider.baseUrl || 'http://localhost:11434/v1',
                 apiKey: parsed.provider.apiKey || '',
                 model: parsed.provider.model || 'unknown-model',

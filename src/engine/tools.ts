@@ -1,83 +1,64 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
+import { tool } from 'ai';
+import { z } from 'zod';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { searchFiles, readDirRecursive } from './fsUtils.js';
 
-const execAsync = promisify(exec);
-
-export const toolsSchema = [
-    {
-        type: 'function',
-        function: {
-            name: 'grep',
-            description: 'Search for a string pattern across files in the active workspace using ripgrep. Use this to find where variables, classes, or functions are defined or used.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    pattern: {
-                        type: 'string',
-                        description: 'The string pattern to search for'
-                    }
-                },
-                required: ['pattern']
-            }
-        }
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'read_file',
+export function getWrenTools(cwd: string, onToolStart?: (name: string, args: any) => void) {
+    return {
+        search_files: tool({
+            description: 'Search for a string pattern across files in the active workspace. Use this to find where variables, classes, or functions are defined or used.',
+            inputSchema: z.object({
+                pattern: z.string().describe('The string pattern to search for'),
+            }),
+            execute: async (args: { pattern: string }) => {
+                if (onToolStart) onToolStart('search_files', args);
+                const { pattern } = args;
+                try {
+                    const matches = await searchFiles(cwd, pattern);
+                    if (matches.length === 0) return 'No matches found.';
+                    return matches.join('\n');
+                } catch (err: any) {
+                    return `Error searching files: ${err.message}`;
+                }
+            },
+        }),
+        read_file: tool({
             description: 'Reads the complete contents of a file in the active workspace.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    filepath: {
-                        type: 'string',
-                        description: 'The relative or absolute path to the file to read'
+            inputSchema: z.object({
+                filepath: z.string().describe('The relative or absolute path to the file to read'),
+            }),
+            execute: async (args: { filepath: string }) => {
+                if (onToolStart) onToolStart('read_file', args);
+                const { filepath } = args;
+                const resolvedPath = path.resolve(cwd, filepath);
+                try {
+                    const content = await fs.readFile(resolvedPath, 'utf8');
+                    if (content.length > 50000) {
+                        return content.substring(0, 50000) + '\n\n...[FILE TRUNCATED FOR LENGTH]...';
                     }
-                },
-                required: ['filepath']
-            }
-        }
-    }
-];
-
-export async function executeTool(name: string, args: Record<string, any>, cwd: string): Promise<string> {
-    try {
-        if (name === 'grep') {
-            const { pattern } = args;
-            if (!pattern) return 'Error: pattern is required for grep.';
-            
-            try {
-                const { stdout } = await execAsync(`rg "${pattern}" --line-number --max-count=50`, { cwd });
-                return stdout || 'No matches found.';
-            } catch (err: any) {
-                if (err.code === 1) {
-                    return 'No matches found.';
+                    return content;
+                } catch (err: any) {
+                    return `Error reading file: ${err.message}`;
                 }
-                return `Error running grep: ${err.message}`;
-            }
-        }
-        
-        if (name === 'read_file') {
-            const { filepath } = args;
-            if (!filepath) return 'Error: filepath is required for read_file.';
-            
-            const fs = await import('node:fs/promises');
-            const path = await import('node:path');
-            const resolvedPath = path.resolve(cwd, filepath);
-            
-            try {
-                const content = await fs.readFile(resolvedPath, 'utf8');
-                if (content.length > 50000) {
-                    return content.substring(0, 50000) + '\n\n...[FILE TRUNCATED FOR LENGTH]...';
+            },
+        }),
+        list_dir: tool({
+            description: 'List all files and folders in a specific directory or the root workspace to orient yourself.',
+            inputSchema: z.object({
+                dirpath: z.string().describe('The relative path of the directory to list. Leave empty string for the root workspace directory.'),
+            }),
+            execute: async (args: { dirpath: string }) => {
+                if (onToolStart) onToolStart('list_dir', args);
+                const resolvedPath = args.dirpath ? path.resolve(cwd, args.dirpath) : cwd;
+                try {
+                    const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+                    const formatted = entries.map(e => `${e.isDirectory() ? '[DIR]' : '[FILE]'} ${e.name}`);
+                    return formatted.join('\n') || 'Directory is empty.';
+                } catch (err: any) {
+                    return `Error listing directory: ${err.message}`;
                 }
-                return content;
-            } catch (err: any) {
-                return `Error reading file: ${err.message}`;
-            }
-        }
-        
-        return `Error: Tool ${name} is not recognized.`;
-    } catch (e: any) {
-        return `Unexpected execution error: ${e.message}`;
-    }
+            },
+        })
+    };
 }

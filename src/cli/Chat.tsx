@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { TextInput, Badge } from '@inkjs/ui';
 import type { ProviderConfig, AppConfig } from '../engine/config.js';
-import { chatCompletion, type ChatMessage } from '../engine/llm.js';
-import { executeTool } from '../engine/tools.js';
+import { runAgentLoop, type ModelMessage } from '../engine/llm.js';
 
 interface ChatProps {
     config: ProviderConfig;
@@ -13,15 +12,11 @@ interface ChatProps {
     isActive: boolean;
 }
 
-interface MessageWithId {
+type MessageWithId = ModelMessage & {
     id: number;
-    role: 'system' | 'user' | 'assistant' | 'tool';
-    content: string | null;
-    name?: string;
-    tool_calls?: any[];
-    tool_call_id?: string;
     isStatus?: boolean;
-}
+    statusText?: string;
+};
 
 export const Chat: React.FC<ChatProps> = ({ config, appConfig, onEditConfig, onEditWorkspace, isActive }) => {
     const [messages, setMessages] = useState<MessageWithId[]>([]);
@@ -72,88 +67,106 @@ export const Chat: React.FC<ChatProps> = ({ config, appConfig, onEditConfig, onE
         setIsLoading(true);
         setError(null);
 
-        const sysPrompt: ChatMessage = {
+        const sysPrompt: ModelMessage = {
             role: 'system',
-            content: `You are Wren, an expert coding assistant.\nYou are running inside the directory: ${activeWorkspace}\nUse the provided tools to navigate and read the codebase before answering.`
+            content: `You are Wren, an expert, highly autonomous coding agent.
+You are running inside the directory: ${activeWorkspace}
+
+CRITICAL RULES:
+1. You have a set of OS-agnostic Node.js tools (search_files, read_file, list_dir). Use them aggressively to explore the project.
+2. DO NOT ask the user for permission to search or read files. If you need context, use your tools immediately.
+3. Keep your conversational output concise. You don't need to narrate every step. Use your tools sequentially to gather context, and only report back to the user when you have a complete answer or have finished exploring.
+4. You are currently in the "Thinker" persona. You cannot edit files or run commands. Your goal is to navigate the project, understand its structure, and answer user queries deeply.
+5. If the user asks an open-ended question like "tell me about this project", use \`list_dir\` to see the root, then \`read_file\` on READMEs or package.json, then summarize.`
         };
         
-        const payloadMessages: ChatMessage[] = [sysPrompt, ...currentMessages.filter(m => !m.isStatus).map(m => {
-            const copy: any = { role: m.role, content: m.content || null };
-            if (m.tool_calls) copy.tool_calls = m.tool_calls;
-            if (m.tool_call_id) copy.tool_call_id = m.tool_call_id;
-            if (m.name) copy.name = m.name;
-            return copy as ChatMessage;
-        })];
+        // Filter out status messages for the LLM
+        const payloadMessages: ModelMessage[] = [
+            sysPrompt,
+            ...currentMessages.filter(m => !m.isStatus).map(m => {
+                // Remove UI-specific properties
+                const { id, isStatus, statusText, ...core } = m;
+                return core as ModelMessage;
+            })
+        ];
 
         const assistantMsgId = Date.now() + Math.random();
         const initialAssistantMsg: MessageWithId = { id: assistantMsgId, role: 'assistant', content: '' };
         
-        setMessages([...currentMessages, initialAssistantMsg]);
+        setMessages(prev => [...prev, initialAssistantMsg]);
 
         let streamContent = '';
-        const response = await chatCompletion(payloadMessages, config, (chunk) => {
-            streamContent += chunk;
-            setMessages(prev => {
-                const updated = [...prev];
-                const lastIdx = updated.length - 1;
-                const lastMsg = updated[lastIdx];
-                if (lastMsg && lastMsg.id === assistantMsgId) {
-                    updated[lastIdx] = { ...lastMsg, content: streamContent };
-                }
-                return updated;
-            });
-        });
+        
+        const { success, result, error } = await runAgentLoop(
+            payloadMessages,
+            config,
+            activeWorkspace,
+            (event) => {
+                // onStepFinish
+            },
+            (event) => {
+                // onFinish
+            },
+            (name) => {
+                // onToolStart
+                setMessages(prev => [...prev, {
+                    id: Date.now() + Math.random(),
+                    role: 'system',
+                    content: '',
+                    isStatus: true,
+                    statusText: `[Wren is running ${name}...]`
+                }]);
+            }
+        );
 
-        if (!response.success) {
+        if (!success || !result) {
             setIsLoading(false);
-            setError(response.error || 'Unknown error occurred.');
+            setError(error || 'Unknown error occurred.');
             return;
         }
 
-        const finalAssistantMsg: MessageWithId = {
-            id: assistantMsgId,
-            role: 'assistant',
-            content: response.content || null,
-        };
-        if (response.tool_calls) {
-            finalAssistantMsg.tool_calls = response.tool_calls;
-        }
-        
-        const nextMessages = [...currentMessages.filter(m => !m.isStatus), finalAssistantMsg];
-        setMessages(nextMessages);
-
-        if (response.tool_calls && response.tool_calls.length > 0) {
-            for (const tc of response.tool_calls) {
-                let parsedArgs = {};
-                try {
-                    parsedArgs = JSON.parse(tc.function.arguments);
-                } catch(e) {}
-                
-                // Show executing status
-                setMessages([...nextMessages, { 
-                    id: Date.now() + Math.random(), 
-                    role: 'system', 
-                    content: `[Wren is running ${tc.function.name}...]`, 
-                    isStatus: true 
-                }]);
-
-                const result = await executeTool(tc.function.name, parsedArgs, activeWorkspace);
-                
-                nextMessages.push({
-                    id: Date.now() + Math.random(),
-                    role: 'tool',
-                    tool_call_id: tc.id,
-                    name: tc.function.name,
-                    content: result
+        try {
+            for await (const chunk of result.textStream) {
+                streamContent += chunk;
+                setMessages(prev => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    const lastMsg = updated[lastIdx];
+                    
+                    if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isStatus) {
+                        updated[lastIdx] = { ...lastMsg, content: streamContent };
+                    } else {
+                        // If a status message was pushed, append a new assistant message for the continued stream
+                        updated.push({ id: Date.now() + Math.random(), role: 'assistant', content: streamContent });
+                    }
+                    return updated;
                 });
-                setMessages([...nextMessages]);
             }
+
+            // Once stream is completely finished, fetch the final structured messages from the SDK
+            // This includes all tool calls and tool results automatically generated during maxSteps!
+            const finalResponse = await result.response;
+            const finalMessages = finalResponse.messages;
             
-            // Recurse
-            await processAgentLoop(nextMessages);
-        } else {
+            // We append the new messages generated in this turn to our UI state
+            setMessages(prev => {
+                // Remove the temporary streaming assistant messages from this turn
+                const withoutTemps = prev.filter(m => m.id !== assistantMsgId && !(m.role === 'assistant' && typeof m.content === 'string' && m.content === streamContent));
+                
+                // Map the new messages to our UI type
+                const newUIMessages = finalMessages.map((m: ModelMessage) => ({
+                    ...m,
+                    id: Date.now() + Math.random()
+                }));
+                
+                return [...withoutTemps, ...newUIMessages];
+            });
+
+        } catch (err: any) {
+            setError(err.message || 'Stream reading error');
+        } finally {
             setIsLoading(false);
-            setInputKey(prev => prev + 1); // Reset input after complete loop
+            setInputKey(prev => prev + 1);
         }
     };
 
@@ -189,29 +202,42 @@ export const Chat: React.FC<ChatProps> = ({ config, appConfig, onEditConfig, onE
                         </Box>
                     ) : (
                         messages.map((msg) => {
-                            if (msg.role === 'tool') {
-                                return (
-                                    <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
-                                        <Text dimColor color="gray">Ran {msg.name} successfully.</Text>
-                                    </Box>
-                                );
-                            }
                             if (msg.isStatus) {
                                 return (
                                     <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
-                                        <Text color="yellow" italic>{msg.content}</Text>
+                                        <Text color="yellow" italic>{msg.statusText}</Text>
                                     </Box>
                                 );
                             }
-                            if (msg.role === 'system') return null; // Hide actual system prompts if any are rendered
+                            if (msg.role === 'tool') {
+                                // Vercel AI SDK tool result message
+                                const toolNames = Array.isArray(msg.content) ? msg.content.map((c: any) => c.toolName).join(', ') : 'tools';
+                                return (
+                                    <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
+                                        <Text dimColor color="gray">Ran {toolNames} successfully.</Text>
+                                    </Box>
+                                );
+                            }
+                            if (msg.role === 'system') return null; // Hide actual system prompts
 
                             const isUser = msg.role === 'user';
+                            
+                            // Extract text content from Vercel AI SDK message (it can be an array of parts for assistant messages with tool calls)
+                            let textContent = '';
+                            if (typeof msg.content === 'string') {
+                                textContent = msg.content;
+                            } else if (Array.isArray(msg.content)) {
+                                textContent = msg.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('');
+                            }
+
+                            if (!textContent && msg.role === 'assistant') return null; // Skip empty assistant messages (like pure tool calls)
+
                             return (
                                 <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
                                     <Text bold color={isUser ? 'cyan' : '#FF9900'}>
                                         {isUser ? 'You:' : 'Wren:'}
                                     </Text>
-                                    {msg.content && <Text>{msg.content}</Text>}
+                                    {textContent && <Text>{textContent}</Text>}
                                 </Box>
                             );
                         })

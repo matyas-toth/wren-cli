@@ -14,6 +14,7 @@ export const ConfigWizard: React.FC<ConfigWizardProps> = ({ config, onSave, onCl
     
     // Add new provider state
     const [activeInput, setActiveInput] = useState<'name' | 'baseUrl' | 'apiKey' | 'model'>('name');
+    
     const [newName, setNewName] = useState('');
     const [baseUrl, setBaseUrl] = useState('');
     const [apiKey, setApiKey] = useState('');
@@ -74,13 +75,15 @@ export const ConfigWizard: React.FC<ConfigWizardProps> = ({ config, onSave, onCl
     };
 
     const handleSubmitModel = async (value: string) => {
-        const model = value.trim() || 'qwen2.5-coder:7b';
+        const finalModel = value.trim() || 'qwen2.5-coder:7b';
+        
         const newProvider: ProviderConfig = {
             id: Date.now().toString(),
             name: newName,
+            providerType: 'custom',
             baseUrl,
             apiKey,
-            model
+            model: finalModel
         };
         const newConfig = {
             ...config,
@@ -145,7 +148,7 @@ export const ConfigWizard: React.FC<ConfigWizardProps> = ({ config, onSave, onCl
     const renderAdd = () => {
         return (
             <Box flexDirection="column" gap={1}>
-                <Text bold color="green">Add New Provider</Text>
+                <Text bold color="green">Add Custom Provider</Text>
                 
                 <Box flexDirection="column">
                     <Box>
@@ -154,7 +157,7 @@ export const ConfigWizard: React.FC<ConfigWizardProps> = ({ config, onSave, onCl
                             <TextInput placeholder="e.g. Local LM Studio" onSubmit={handleSubmitName} />
                         ) : <Text>{newName}</Text>}
                     </Box>
-
+                    
                     {activeInput !== 'name' && (
                         <Box>
                             <Text bold color={activeInput === 'baseUrl' ? 'cyan' : 'white'}>Base URL: </Text>

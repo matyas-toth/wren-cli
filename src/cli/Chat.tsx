@@ -4,6 +4,8 @@ import { TextInput, Badge } from '@inkjs/ui';
 import type { ProviderConfig, AppConfig } from '../engine/config.js';
 import { runAgentLoop, type ModelMessage } from '../engine/llm.js';
 
+
+
 interface ChatProps {
     config: ProviderConfig;
     appConfig: AppConfig;
@@ -49,7 +51,7 @@ export const Chat: React.FC<ChatProps> = ({ config, appConfig, onEditConfig, onE
         } else if (key.ctrl && key.upArrow) {
             setScrollOffset(prev => prev + 1);
         }
-        
+
         if (key.pageDown) {
             setScrollOffset(prev => Math.max(prev - 10, 0));
         } else if (key.ctrl && key.downArrow) {
@@ -69,17 +71,93 @@ export const Chat: React.FC<ChatProps> = ({ config, appConfig, onEditConfig, onE
 
         const sysPrompt: ModelMessage = {
             role: 'system',
-            content: `You are Wren, an expert, highly autonomous coding agent.
-You are running inside the directory: ${activeWorkspace}
+            content: `
+You are Wren, an expert autonomous coding reasoning agent (“Thinker”) operating in: ${activeWorkspace}
 
-CRITICAL RULES:
-1. You have a set of OS-agnostic Node.js tools (search_files, read_file, list_dir). Use them aggressively to explore the project.
-2. DO NOT ask the user for permission to search or read files. If you need context, use your tools immediately.
-3. Keep your conversational output concise. You don't need to narrate every step. Use your tools sequentially to gather context, and only report back to the user when you have a complete answer or have finished exploring.
-4. You are currently in the "Thinker" persona. You cannot edit files or run commands. Your goal is to navigate the project, understand its structure, and answer user queries deeply.
-5. If the user asks an open-ended question like "tell me about this project", use \`list_dir\` to see the root, then \`read_file\` on READMEs or package.json, then summarize.`
+Your role is to investigate, reason about, and deeply understand code, systems, architecture, bugs, and implementation strategy. You do NOT write code, edit files, or execute commands. You think, explore, and produce accurate technical understanding for the Executor agent or user.
+
+You use evidence, not assumptions. Neither you nor the user is always correct; accuracy comes from investigation.
+
+---
+
+# BEHAVIOR
+
+For coding, debugging, architecture, implementation, or project questions:
+- act autonomously
+- use tools aggressively (grep, find_files, read_file, read_file_lines, list_dir)
+- prioritize reasoning through evidence
+- prefer exploration over speculation
+- prefer action over discussion
+
+For casual conversation:
+→ respond naturally and concisely
+→ do not over-investigate unless needed
+
+---
+
+# HARD RULES
+
+- NEVER ask for permission, confirmation, or next steps when information can be found yourself
+- NEVER output “Should I…”, “Do you want me to…”, or similar
+- NEVER guess when tools can resolve uncertainty
+- NEVER stop before sufficient understanding is reached
+- NEVER loop on the same file/path without new evidence
+
+If uncertain:
+→ search deeper
+→ expand scope
+→ change direction
+→ do NOT ask unnecessarily
+
+---
+
+# REASONING WORKFLOW
+
+Missing context:
+→ search first
+
+General understanding:
+→ broad exploration first
+
+Specific implementation:
+→ narrow to files/functions
+
+Deep understanding:
+→ inspect relevant code directly
+
+Always:
+broad → narrow → deep → expand
+
+---
+
+# COMPLETION
+
+Stop only when:
+- the system/problem is sufficiently understood
+- evidence supports a confident answer
+- or no meaningful new information remains
+
+---
+
+# OUTPUT
+
+- concise
+- technically dense
+- evidence-based
+- minimal filler
+- conclusions over narration
+- reasoning over speculation
+
+---
+
+# GOLDEN RULE
+
+If you are about to ask the user something you can discover yourself:
+→ stop
+→ investigate instead
+`
         };
-        
+
         // Filter out status messages for the LLM
         const payloadMessages: ModelMessage[] = [
             sysPrompt,
@@ -92,11 +170,11 @@ CRITICAL RULES:
 
         const assistantMsgId = Date.now() + Math.random();
         const initialAssistantMsg: MessageWithId = { id: assistantMsgId, role: 'assistant', content: '' };
-        
+
         setMessages(prev => [...prev, initialAssistantMsg]);
 
         let streamContent = '';
-        
+
         const { success, result, error } = await runAgentLoop(
             payloadMessages,
             config,
@@ -132,7 +210,7 @@ CRITICAL RULES:
                     const updated = [...prev];
                     const lastIdx = updated.length - 1;
                     const lastMsg = updated[lastIdx];
-                    
+
                     if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isStatus) {
                         updated[lastIdx] = { ...lastMsg, content: streamContent };
                     } else {
@@ -147,18 +225,18 @@ CRITICAL RULES:
             // This includes all tool calls and tool results automatically generated during maxSteps!
             const finalResponse = await result.response;
             const finalMessages = finalResponse.messages;
-            
+
             // We append the new messages generated in this turn to our UI state
             setMessages(prev => {
                 // Remove the temporary streaming assistant messages from this turn
                 const withoutTemps = prev.filter(m => m.id !== assistantMsgId && !(m.role === 'assistant' && typeof m.content === 'string' && m.content === streamContent));
-                
+
                 // Map the new messages to our UI type
                 const newUIMessages = finalMessages.map((m: ModelMessage) => ({
                     ...m,
                     id: Date.now() + Math.random()
                 }));
-                
+
                 return [...withoutTemps, ...newUIMessages];
             });
 
@@ -221,7 +299,7 @@ CRITICAL RULES:
                             if (msg.role === 'system') return null; // Hide actual system prompts
 
                             const isUser = msg.role === 'user';
-                            
+
                             // Extract text content from Vercel AI SDK message (it can be an array of parts for assistant messages with tool calls)
                             let textContent = '';
                             if (typeof msg.content === 'string') {

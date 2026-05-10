@@ -111,3 +111,19 @@ export async function searchFiles(cwd: string, pattern: string): Promise<string[
     
     return matches.slice(0, 50);
 }
+
+export async function findFilesByName(cwd: string, namePattern: string): Promise<string[]> {
+    const files = await readDirRecursive(cwd);
+    const regex = new RegExp(namePattern, 'i');
+    const matches: string[] = [];
+    
+    for (const filePath of files) {
+        const relativePath = path.relative(cwd, filePath);
+        if (regex.test(relativePath)) {
+            matches.push(relativePath);
+            if (matches.length >= 50) break; // Limit to 50 results
+        }
+    }
+    
+    return matches;
+}

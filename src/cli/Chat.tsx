@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { TextInput, Badge } from '@inkjs/ui';
 import type { ProviderConfig, AppConfig } from '../engine/config.js';
 import { runAgentLoop, type ModelMessage } from '../engine/llm.js';
+import { MarkdownRenderer } from './renderers/MarkdownRenderer.js';
 
 
 
@@ -315,7 +316,7 @@ If you are about to ask the user something you can discover yourself:
                                     <Text bold color={isUser ? 'cyan' : '#FF9900'}>
                                         {isUser ? 'You:' : 'Wren:'}
                                     </Text>
-                                    {textContent && <Text>{textContent}</Text>}
+                                    {textContent && <MarkdownRenderer content={textContent}></MarkdownRenderer>}
                                 </Box>
                             );
                         })

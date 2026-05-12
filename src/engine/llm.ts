@@ -28,7 +28,7 @@ export async function runAgentLoop(
             model,
             messages,
             tools,
-            stopWhen: stepCountIs(20), // Automatically loop up to 20 times for tool calling
+            stopWhen: stepCountIs(50), // Automatically loop up to 20 times for tool calling
             onStepFinish: (event) => {
                 onStepFinish(event);
             },

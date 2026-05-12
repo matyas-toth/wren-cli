@@ -21,6 +21,24 @@ type MessageWithId = ModelMessage & {
     statusText?: string;
 };
 
+const formatToolName = (name: string) => {
+    return name.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join('_');
+};
+
+const formatToolArgs = (args: any) => {
+    if (!args) return '';
+    let str = '';
+    if (args.filepath) str = args.filepath;
+    else if (args.pattern) str = args.pattern;
+    else if (args.dirpath !== undefined) str = args.dirpath || '/'; // Handle empty string as root
+    else str = typeof args === 'object' ? JSON.stringify(args) : String(args);
+
+    if (str.length > 60) {
+        return str.substring(0, 60) + '...';
+    }
+    return str;
+};
+
 export const Chat: React.FC<ChatProps> = ({ config, appConfig, onEditConfig, onEditWorkspace, isActive }) => {
     const [messages, setMessages] = useState<MessageWithId[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -186,14 +204,14 @@ If you are about to ask the user something you can discover yourself:
             (event) => {
                 // onFinish
             },
-            (name) => {
+            (name, args) => {
                 // onToolStart
                 setMessages(prev => [...prev, {
                     id: Date.now() + Math.random(),
                     role: 'system',
                     content: '',
                     isStatus: true,
-                    statusText: `[Wren is running ${name}...]`
+                    statusText: `◐ ${formatToolName(name)} ( ${formatToolArgs(args)} )`
                 }]);
             }
         );
@@ -280,7 +298,7 @@ If you are about to ask the user something you can discover yourself:
                             </Box>
                         </Box>
                     ) : (
-                        messages.map((msg) => {
+                        messages.map((msg, index, arr) => {
                             if (msg.isStatus) {
                                 return (
                                     <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
@@ -288,18 +306,8 @@ If you are about to ask the user something you can discover yourself:
                                     </Box>
                                 );
                             }
-                            if (msg.role === 'tool') {
-                                // Vercel AI SDK tool result message
-                                const toolNames = Array.isArray(msg.content) ? msg.content.map((c: any) => c.toolName).join(', ') : 'tools';
-                                return (
-                                    <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
-                                        <Text dimColor color="gray">Ran {toolNames} successfully.</Text>
-                                    </Box>
-                                );
-                            }
+                            if (msg.role === 'tool') return null;
                             if (msg.role === 'system') return null; // Hide actual system prompts
-
-                            const isUser = msg.role === 'user';
 
                             // Extract text content from Vercel AI SDK message (it can be an array of parts for assistant messages with tool calls)
                             let textContent = '';
@@ -311,11 +319,37 @@ If you are about to ask the user something you can discover yourself:
 
                             if (!textContent && msg.role === 'assistant') return null; // Skip empty assistant messages (like pure tool calls)
 
+                            let showPrefix = true;
+                            for (let i = index - 1; i >= 0; i--) {
+                                const prevMsg = arr[i];
+                                if (!prevMsg || prevMsg.role === 'system' || prevMsg.role === 'tool' || prevMsg.isStatus) continue;
+
+                                let prevTextContent = '';
+                                if (typeof prevMsg.content === 'string') {
+                                    prevTextContent = prevMsg.content;
+                                } else if (Array.isArray(prevMsg.content)) {
+                                    prevTextContent = prevMsg.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('');
+                                }
+
+                                if (!prevTextContent && prevMsg.role === 'assistant') continue;
+
+                                if (prevMsg.role === msg.role) {
+                                    showPrefix = false;
+                                }
+                                break;
+                            }
+
+                            const isUser = msg.role === 'user';
+
                             return (
-                                <Box key={msg.id} flexDirection="column" marginBottom={1} flexShrink={0}>
-                                    <Text bold color={isUser ? 'cyan' : '#FF9900'}>
-                                        {isUser ? 'You:' : 'Wren:'}
-                                    </Text>
+                                <Box key={msg.id} flexDirection="column" marginBottom={showPrefix ? 0 : 1} flexShrink={0}>
+                                    {showPrefix && (
+                                        <Box marginBottom={1}>
+                                            <Text bold color={isUser ? 'cyan' : '#FF9900'}>
+                                                {isUser ? 'You:' : 'Wren:'}
+                                            </Text>
+                                        </Box>
+                                    )}
                                     {textContent && <MarkdownRenderer content={textContent}></MarkdownRenderer>}
                                 </Box>
                             );

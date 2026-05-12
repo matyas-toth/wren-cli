@@ -76,9 +76,9 @@ export function getWrenTools(cwd: string, onToolStart?: (name: string, args: any
                     const lines = content.split('\n');
                     const startIdx = Math.max(0, start_line - 1);
                     const endIdx = Math.min(lines.length, end_line);
-                    
+
                     if (startIdx >= lines.length) return 'Start line is beyond the end of the file.';
-                    
+
                     const slice = lines.slice(startIdx, endIdx);
                     return slice.map((line, idx) => `${startIdx + idx + 1}: ${line}`).join('\n');
                 } catch (err: any) {

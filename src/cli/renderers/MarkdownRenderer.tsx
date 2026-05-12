@@ -7,34 +7,45 @@ import { Chalk } from "chalk";
 const chalk = new Chalk();
 
 marked.setOptions({
-    renderer: new TerminalRenderer({
+    renderer: (new TerminalRenderer({
 
         tab: 2,
 
-        heading: (text) =>
-            "" + chalk.hex("#00ff87").bold.underline(text) + "",
+        heading: (text: string) =>
+            chalk.hex("#CC561E").bold.underline(
+                text
+                    .replace(/\n+$/g, "")
+                    .trim()
+            ),
 
-        firstHeading: (text) =>
+        firstHeading: (text: string) =>
             "" +
-            chalk.hex("#00d9ff").bold.underline(`${text}`) +
+            chalk.hex("#CC561E").bold.underline(`${text}`) +
             "",
 
-        paragraph: (text) => chalk.reset(text).replaceAll("\n", "").replaceAll("\\n", ""),
+        paragraph: (text: string) =>
+            chalk.reset(
+                text
+                    .replace(/\n{2,}/g, "\n")   // collapse multiple blank lines
+                    .replace(/\n+$/g, "")       // remove trailing real newlines
+                    .replace(/(\\n)+$/g, "")    // remove trailing escaped newlines
+                    .trimEnd()
+            ),
         strong: chalk.bold.hex("#ffffff"),
         em: chalk.italic.hex("#d4d4d4"),
         del: chalk.dim.strikethrough.gray,
 
         // Code-related
-        code: (text) =>
+        code: (text: string) =>
             chalk.bgHex("#1e1e1e").hex("#ffd866")(` ${text} `),
 
-        codespan: (text) =>
+        codespan: (text: string) =>
             chalk.bgHex("#2a2a2a").hex("#ffcb6b")(` ${text} `),
 
         html: chalk.dim.gray,
 
         // Quotes / callouts
-        blockquote: (text) =>
+        blockquote: (text: string) =>
             chalk.hex("#7f8c8d").italic(`│ ${text}`),
 
         // Links
@@ -45,10 +56,10 @@ marked.setOptions({
         hr: () => "\n" + chalk.dim('-'.repeat(process.stdout.columns - 6)) + "\n",
 
         // Lists
-        listitem: (text) =>
+        listitem: (text: string) =>
             chalk.hex("#00bcd4")("") + text,
 
-        list: (body, ordered) => {
+        list: (body: string, ordered?: boolean) => {
             // Remove excessive blank lines between nested list items
             const cleaned = body
                 .replace(/\n{3,}/g, "\n\n")     // collapse huge gaps
@@ -89,7 +100,7 @@ marked.setOptions({
             }
         },
 
-    }),
+    }) as any),
 });
 
 
